@@ -6,7 +6,7 @@ import { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { getMarkdownComponents, generateToc } from '../../utils/markdownRenderer';
+import { getMarkdownComponents, generateToc, transformYouTubeIframes } from '../../utils/markdownRenderer';
 import type { Post } from '../../types';
 
 // 导入代码高亮样式
@@ -88,7 +88,7 @@ export function PostContent({ post }: PostContentProps) {
               rehypePlugins={[rehypeHighlight]}
               components={markdownComponents}
             >
-              {post.content}
+              {transformYouTubeIframes(post.content)}
             </ReactMarkdown>
           </div>
         </div>
