@@ -136,7 +136,7 @@ export async function apiRequest<T = any>(
         handleUnauthorized();
       }
       
-      throw new Error(data.error || data.message || '请求失败');
+      throw new Error(data.message && data.message !== data.error ? `${data.error}: ${data.message}` : (data.error || data.message || '请求失败'));
     }
     
     return data;
