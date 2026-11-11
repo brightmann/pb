@@ -49,9 +49,6 @@ function validateEnv(env: Env): { valid: boolean; error?: string } {
   if (!env.DB) {
     return { valid: false, error: 'DB is not configured' };
   }
-  if (!env.STORAGE) {
-    return { valid: false, error: 'STORAGE is not configured' };
-  }
   if (!env.JWT_SECRET) {
     return { valid: false, error: 'JWT_SECRET is not configured' };
   }
