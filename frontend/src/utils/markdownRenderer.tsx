@@ -57,10 +57,10 @@ export function transformYouTubeIframes(markdown: string): string {
  * - 禁止 script / style / form / object / embed 等活动内容标签
  * - 禁止 on* 事件属性、javascript: 等危险协议（DOMPurify 默认）
  * - iframe 仅允许 https 地址（支持 YouTube 以外的 https 嵌入）
- * 净化后的 HTML 编码为 rawhtml:// 占位链接，由 LinkComponent 还原渲染。
+ * 净化后的 HTML 编码为占位链接，由 LinkComponent 还原渲染。
  * 净化后被完全移除的内容（如 <script>）不会出现在页面中。
  */
-const RAW_HTML_PROTOCOL = 'rawhtml://';
+const RAW_HTML_PROTOCOL = 'https://rawhtml.local/'; // 必须是 react-markdown 默认 urlTransform 允许的协议（https），否则 href 被清空
 
 /** 成对标签：<tag ...>...</tag>（允许跨行内容） */
 const RAW_HTML_PAIR_RE = /<([a-zA-Z][a-zA-Z0-9-]*)\b[^>]*>[\s\S]*?<\/\1\s*>/g;
@@ -133,7 +133,7 @@ function transformOutsideCode(markdown: string, fn: (segment: string) => string)
 /**
  * 处理 Markdown 中的原始 HTML：
  * 1. 代码区域外的 YouTube iframe 先转为链接，由 LinkComponent 渲染为播放器；
- * 2. 其余 HTML 经 DOMPurify 白名单净化后编码为 rawhtml:// 占位链接，
+ * 2. 其余 HTML 经 DOMPurify 白名单净化后编码为占位链接，
  *    由 LinkComponent 还原为净化后的 HTML 渲染。
  */
 export function transformRawHtml(markdown: string): string {
