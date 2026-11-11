@@ -103,7 +103,7 @@ export const POST_CONSTANTS = {
    * 文章标题最小长度
    * 确保标题有意义，避免过短的标题
    */
-  MIN_TITLE_LENGTH: 3,
+  MIN_TITLE_LENGTH: 2,
 
   /**
    * 文章标题最大长度
