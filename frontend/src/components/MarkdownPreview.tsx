@@ -17,7 +17,7 @@ import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { getMarkdownComponents, generateToc } from '../utils/markdownRenderer';
+import { getMarkdownComponents, generateToc, transformYouTubeIframes } from '../utils/markdownRenderer';
 import 'highlight.js/styles/github-dark.css';
 
 interface MarkdownPreviewProps {
@@ -65,7 +65,7 @@ export function MarkdownPreview({ content, className = '', showToc = false }: Ma
           components={components}
           className="markdown-body"
         >
-          {content}
+          {transformYouTubeIframes(content)}
         </ReactMarkdown>
       </div>
     </div>
@@ -85,7 +85,7 @@ export function SimpleMarkdownPreview({ content, className = '' }: Omit<Markdown
       components={components}
       className={className}
     >
-      {content}
+      {transformYouTubeIframes(content)}
     </ReactMarkdown>
   );
 }
@@ -111,7 +111,7 @@ export function SplitPreview({ content, isVisible }: SplitPreviewProps) {
           rehypePlugins={[rehypeHighlight]}
           components={components}
         >
-          {content}
+          {transformYouTubeIframes(content)}
         </ReactMarkdown>
       </div>
     </div>
