@@ -4,6 +4,8 @@
  * - 链接在新标签页打开
  * - 增强的代码高亮
  * - 表格、任务列表等 GitHub 风格渲染
+ * - 原始 HTML 渲染（DOMPurify 白名单净化，禁止 script/style/危险协议，iframe 仅 https）
+ * - YouTube 嵌入视频（youtube.com / youtube-nocookie.com embed 地址渲染为播放器）
  *
  * 主题适配规范（v2.0）：
  * - 所有颜色使用语义化 token（text-foreground / text-muted-foreground / bg-card 等）
@@ -13,6 +15,7 @@
  * @version 2.0.0 - 完整主题适配，保留所有原始功能
  */
 
+import DOMPurify from 'dompurify';
 import type { Components } from 'react-markdown';
 
 
@@ -47,9 +50,118 @@ export function transformYouTubeIframes(markdown: string): string {
 }
 
 /**
+ * 通用原始 HTML 支持（安全净化后渲染）
+ *
+ * 作者可在 Markdown 中直接书写 HTML（iframe 嵌入、表格、排版标签等）。
+ * 渲染前先用 DOMPurify 白名单净化：
+ * - 禁止 script / style / form / object / embed 等活动内容标签
+ * - 禁止 on* 事件属性、javascript: 等危险协议（DOMPurify 默认）
+ * - iframe 仅允许 https 地址（支持 YouTube 以外的 https 嵌入）
+ * 净化后的 HTML 编码为 rawhtml:// 占位链接，由 LinkComponent 还原渲染。
+ * 净化后被完全移除的内容（如 <script>）不会出现在页面中。
+ */
+const RAW_HTML_PROTOCOL = 'rawhtml://';
+
+/** 成对标签：<tag ...>...</tag>（允许跨行内容） */
+const RAW_HTML_PAIR_RE = /<([a-zA-Z][a-zA-Z0-9-]*)\b[^>]*>[\s\S]*?<\/\1\s*>/g;
+/** 单个标签：<br>、<img ...>、<hr/> 等 */
+const RAW_HTML_SINGLE_RE = /<[a-zA-Z][a-zA-Z0-9-]*\b[^>]*\/?>/g;
+/** 代码区域：围栏代码块与行内代码，其中的 HTML 是示例文本，不应被渲染 */
+const CODE_REGION_RE = /(```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)|`[^`\n]*`)/g;
+
+const RAW_HTML_SANITIZE_CONFIG = {
+  // 在 DOMPurify 默认白名单基础上补充 iframe（默认不允许）
+  ADD_TAGS: ['iframe'],
+  ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling', 'referrerpolicy', 'loading', 'id', 'align', 'target', 'rel'],
+  // 显式禁止活动内容与表单标签（大部分默认已禁止，这里声明意图）
+  FORBID_TAGS: ['script', 'style', 'form', 'input', 'button', 'select', 'textarea', 'object', 'embed', 'meta', 'link', 'base'],
+  FORBID_ATTR: ['srcdoc'],
+};
+
+let rawHtmlHookRegistered = false;
+
+/** 注册一次性净化钩子：iframe 仅允许 https src；新窗口链接补充 rel 防篡改 */
+function ensureRawHtmlHook(): void {
+  if (rawHtmlHookRegistered) return;
+  DOMPurify.addHook('afterSanitizeAttributes', (node: Element) => {
+    if (node.tagName === 'IFRAME') {
+      const src = node.getAttribute('src') || '';
+      if (!/^https:\/\//i.test(src)) {
+        node.remove();
+      }
+    }
+    if (node.tagName === 'A' && node.getAttribute('target') === '_blank') {
+      node.setAttribute('rel', 'noopener noreferrer');
+    }
+  });
+  rawHtmlHookRegistered = true;
+}
+
+/** UTF-8 安全 base64 编码（分块避免大字符串栈溢出） */
+function encodeUtf8Base64(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+/** UTF-8 安全 base64 解码，失败返回空串 */
+function decodeUtf8Base64(encoded: string): string {
+  try {
+    const binary = atob(encoded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return '';
+  }
+}
+
+/** 只对代码区域以外的文本应用转换 */
+function transformOutsideCode(markdown: string, fn: (segment: string) => string): string {
+  return markdown
+    .split(CODE_REGION_RE)
+    .map((part, index) => (index % 2 === 1 ? part : fn(part)))
+    .join('');
+}
+
+/**
+ * 处理 Markdown 中的原始 HTML：
+ * 1. 代码区域外的 YouTube iframe 先转为链接，由 LinkComponent 渲染为播放器；
+ * 2. 其余 HTML 经 DOMPurify 白名单净化后编码为 rawhtml:// 占位链接，
+ *    由 LinkComponent 还原为净化后的 HTML 渲染。
+ */
+export function transformRawHtml(markdown: string): string {
+  if (!markdown) return markdown;
+  ensureRawHtmlHook();
+  return transformOutsideCode(markdown, (segment) => {
+    const encodeChunk = (chunk: string): string => {
+      const clean = DOMPurify.sanitize(chunk, RAW_HTML_SANITIZE_CONFIG).trim();
+      if (!clean) return '';
+      return `[html](${RAW_HTML_PROTOCOL}${encodeUtf8Base64(clean)})`;
+    };
+    return transformYouTubeIframes(segment)
+      .replace(RAW_HTML_PAIR_RE, encodeChunk)
+      .replace(RAW_HTML_SINGLE_RE, encodeChunk);
+  });
+}
+
+/**
  * 自定义链接组件 - 在新标签页打开
  */
 export const LinkComponent: Components['a'] = ({ node, children, href, ...props }) => {
+  // 净化后的原始 HTML 占位链接，还原渲染
+  if (href?.startsWith(RAW_HTML_PROTOCOL)) {
+    const html = decodeUtf8Base64(href.slice(RAW_HTML_PROTOCOL.length));
+    if (!html) return null;
+    return <span className="raw-html" dangerouslySetInnerHTML={{ __html: html }} />;
+  }
+
   // YouTube 嵌入链接渲染为视频播放器
   if (isYouTubeEmbedUrl(href)) {
     return (
