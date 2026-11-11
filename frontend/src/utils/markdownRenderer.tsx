@@ -15,10 +15,57 @@
 
 import type { Components } from 'react-markdown';
 
+
+/**
+ * YouTube 嵌入视频支持
+ * 只允许 youtube.com / youtube-nocookie.com 的 embed 地址，
+ * 其它来源的 iframe 不会被转换，也不会被渲染
+ */
+const YOUTUBE_EMBED_PREFIXES = [
+  'https://www.youtube.com/embed/',
+  'https://www.youtube-nocookie.com/embed/',
+];
+
+export function isYouTubeEmbedUrl(url: string | undefined | null): boolean {
+  return !!url && YOUTUBE_EMBED_PREFIXES.some((prefix) => url.startsWith(prefix));
+}
+
+/**
+ * 将 Markdown 中的 YouTube iframe 嵌入代码转换为链接标记，
+ * 由 LinkComponent 渲染为 <iframe>；其它 iframe 保持原样（默认不会被渲染）
+ */
+export function transformYouTubeIframes(markdown: string): string {
+  if (!markdown) return markdown;
+  return markdown.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, (block) => {
+    const srcMatch = block.match(/\bsrc\s*=\s*["']([^"']+)["']/i);
+    const src = srcMatch?.[1];
+    if (src && isYouTubeEmbedUrl(src)) {
+      return `[${src}](${src})`;
+    }
+    return block;
+  });
+}
+
 /**
  * 自定义链接组件 - 在新标签页打开
  */
 export const LinkComponent: Components['a'] = ({ node, children, href, ...props }) => {
+  // YouTube 嵌入链接渲染为视频播放器
+  if (isYouTubeEmbedUrl(href)) {
+    return (
+      <span className="relative block w-full my-4 overflow-hidden rounded-lg border border-border" style={{ paddingTop: '56.25%' }}>
+        <iframe
+          src={href}
+          title="YouTube video"
+          className="absolute inset-0 h-full w-full"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          referrerPolicy="strict-origin-when-cross-origin"
+          allowFullScreen
+        />
+      </span>
+    );
+  }
+
   const isExternal = href?.startsWith('http://') || href?.startsWith('https://');
   const baseClass = "text-primary hover:opacity-80 underline underline-offset-2 transition-opacity";
 
